@@ -3,17 +3,17 @@ import os
 import ntpath
 
 
-def fill_mesh(mesh2fill, file: str, opt):
-    load_path = get_mesh_path(file, opt.num_aug)
-    if os.path.exists(load_path):
-        mesh_data = np.load(load_path, encoding='latin1', allow_pickle=True)
-    else:
-        mesh_data = from_scratch(file, opt)
-        np.savez_compressed(load_path, gemm_edges=mesh_data.gemm_edges, vs=mesh_data.vs, edges=mesh_data.edges,
-                            edges_count=mesh_data.edges_count, ve=mesh_data.ve, v_mask=mesh_data.v_mask,
-                            filename=mesh_data.filename, sides=mesh_data.sides,
-                            edge_lengths=mesh_data.edge_lengths, edge_areas=mesh_data.edge_areas,
-                            features=mesh_data.features)
+def fill_mesh(mesh2fill, verts, faces, opt):#, file: str, opt):
+    #load_path = get_mesh_path(file, opt.num_aug)
+    #if os.path.exists(load_path):
+    #    mesh_data = np.load(load_path, encoding='latin1', allow_pickle=True)
+    #else:
+    mesh_data = from_scratch(verts, faces, opt)
+    # np.savez_compressed(load_path, gemm_edges=mesh_data.gemm_edges, vs=mesh_data.vs, edges=mesh_data.edges,
+    #                     edges_count=mesh_data.edges_count, ve=mesh_data.ve, v_mask=mesh_data.v_mask,
+    #                     filename=mesh_data.filename, sides=mesh_data.sides,
+    #                     edge_lengths=mesh_data.edge_lengths, edge_areas=mesh_data.edge_areas,
+    #                     features=mesh_data.features)
     mesh2fill.vs = mesh_data['vs']
     mesh2fill.edges = mesh_data['edges']
     mesh2fill.gemm_edges = mesh_data['gemm_edges']
@@ -25,6 +25,7 @@ def fill_mesh(mesh2fill, file: str, opt):
     mesh2fill.edge_areas = mesh_data['edge_areas']
     mesh2fill.features = mesh_data['features']
     mesh2fill.sides = mesh_data['sides']
+    #mesh2fill.v_to_e = mesh_data['v_to_e']
 
 def get_mesh_path(file: str, num_aug: int):
     filename, _ = os.path.splitext(file)
@@ -36,7 +37,7 @@ def get_mesh_path(file: str, num_aug: int):
         os.makedirs(load_dir, exist_ok=True)
     return load_file
 
-def from_scratch(file, opt):
+def from_scratch(verts, faces, opt):
 
     class MeshPrep:
         def __getitem__(self, item):
@@ -51,7 +52,7 @@ def from_scratch(file, opt):
     mesh_data.filename = 'unknown'
     mesh_data.edge_lengths = None
     mesh_data.edge_areas = []
-    mesh_data.vs, faces = fill_from_file(mesh_data, file)
+    mesh_data.vs, faces = verts, faces#fill_from_file(mesh_data, file)
     mesh_data.v_mask = np.ones(len(mesh_data.vs), dtype=bool)
     faces, face_areas = remove_non_manifolds(mesh_data, faces)
     if opt.num_aug > 1:
@@ -155,11 +156,20 @@ def build_gemm(mesh, faces, face_areas):
             sides[edge_key][nb_count[edge_key] - 2] = nb_count[edge2key[faces_edges[(idx + 1) % 3]]] - 1
             sides[edge_key][nb_count[edge_key] - 1] = nb_count[edge2key[faces_edges[(idx + 2) % 3]]] - 2
     mesh.edges = np.array(edges, dtype=np.int32)
+    #mesh.v_to_e = vertex_to_edge_mapping(mesh)
     mesh.gemm_edges = np.array(edge_nb, dtype=np.int64)
     mesh.sides = np.array(sides, dtype=np.int64)
     mesh.edges_count = edges_count
     mesh.edge_areas = np.array(mesh.edge_areas, dtype=np.float32) / np.sum(face_areas) #todo whats the difference between edge_areas and edge_lenghts?
 
+def vertex_to_edge_mapping(mesh):
+    v_to_e = [[]] * len(mesh.vs)
+    for edge_index in range(len(mesh.edges)):
+        edge = mesh.edges[edge_index]
+        v_to_e[edge[0]] = v_to_e[edge[0]] + [edge_index]
+        v_to_e[edge[1]] = v_to_e[edge[1]] + [edge_index]
+    v_to_e = np.array(v_to_e)
+    return v_to_e
 
 def compute_face_normals_and_areas(mesh, faces):
     face_normals = np.cross(mesh.vs[faces[:, 1]] - mesh.vs[faces[:, 0]],

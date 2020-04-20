@@ -28,11 +28,12 @@ def get_norm_layer(norm_type='instance', num_groups=1):
     return norm_layer
 
 def get_norm_args(norm_layer, nfeats_list):
+    print(norm_layer.func.__name__)
     if hasattr(norm_layer, '__name__') and norm_layer.__name__ == 'NoNorm':
         norm_args = [{'fake': True} for f in nfeats_list]
     elif norm_layer.func.__name__ == 'GroupNorm':
         norm_args = [{'num_channels': f} for f in nfeats_list]
-    elif norm_layer.func.__name__ == 'BatchNorm':
+    elif norm_layer.func.__name__ == 'BatchNorm2d':
         norm_args = [{'num_features': f} for f in nfeats_list]
     else:
         raise NotImplementedError('normalization layer [%s] is not found' % norm_layer.func.__name__)
